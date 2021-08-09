@@ -29,7 +29,7 @@ def date_convert_json(o):
         return o.isoformat()
 
 
-def get_route_list(base_airport: str, minimum_departure_date: str, maximum_return_date: str, minimum_stay: str) -> []:
+def get_route_list(base_airport: str, minimum_departure_date: str, maximum_return_date: str, minimum_stay: str) -> str:
     min_date = dt.datetime.strptime(minimum_departure_date, '%Y-%m-%dT%H:%M')
     max_date = dt.datetime.strptime(maximum_return_date, '%Y-%m-%dT%H:%M')
     min_stay = dt.timedelta(hours=int(minimum_stay))
@@ -98,6 +98,8 @@ def get_route_list(base_airport: str, minimum_departure_date: str, maximum_retur
     for icao in arrival_list:
         arrival_list[icao].sort(key=lambda flight: flight['time_departure'], reverse=True)
 
+    # финальный рывок - отбираем аэропорты и рейсы, которые подпадают под ограничения.
+    ret_data = []  # итоговый объект
     for icao in dep_list:
         minimum_time_arrival = dep_list[icao][0]['time_arrival']
         try:
@@ -108,9 +110,20 @@ def get_route_list(base_airport: str, minimum_departure_date: str, maximum_retur
         print(f'{icao=} {minimum_time_arrival=:%Y-%m-%d %H:%M:%S}   {maximum_time_departure=:%Y-%m-%d %H:%M:%S}  {maximum_stay=} {min_stay=}')
         if maximum_stay < min_stay:
             print(f'Хрен вам, а не {icao}')
+            continue
+        one_airport = {}
+        one_airport['destination_airport_icao'] = icao
+        one_airport['destination_airport_name'] = 'ToDo: airport name'
+        one_airport['maximum_stay'] = round(maximum_stay.total_seconds()/3600)
 
+        one_airport['flight_list_outbound'] = []
+        for one_flight in dep_list[icao]:
+            if one_flight['time_arrival'] + min_stay < maximum_time_departure:
+                one_airport['flight_list_outbound'].append(one_flight)
 
-
-        # print(json.dumps(dep_list, sort_keys=True, indent=1, default=date_convert_json))
-
-    return []
+        one_airport['flight_list_inbound'] = []
+        for one_flight in arrival_list[icao]:
+            if one_flight['time_departure'] - min_stay > minimum_time_arrival:
+                one_airport['flight_list_inbound'].append(one_flight)
+        ret_data.append(one_airport)
+    return json.dumps(ret_data, default=date_convert_json)
