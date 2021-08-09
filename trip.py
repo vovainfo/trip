@@ -9,7 +9,7 @@ def parse_one_flight(one_flight) -> {}:
     new_item = {'time_departure': dt.datetime.strptime(one_flight['departure']['scheduledTimeLocal'], '%Y-%m-%d %H:%M%z'),
                 'time_arrival': dt.datetime.strptime(one_flight['arrival']['scheduledTimeLocal'], '%Y-%m-%d %H:%M%z'),
                 'flight_number': one_flight['number'],
-                'airlaine_name': one_flight['airline']['name']}
+                'airline_name': one_flight['airline']['name']}
 
     try:
         new_item['aircraft_model'] = one_flight['aircraft']['model']
