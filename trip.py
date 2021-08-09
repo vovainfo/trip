@@ -55,7 +55,7 @@ def get_route_list(base_airport: str, minimum_departure_date: str, maximum_retur
         response = requests.request("GET", url, headers=headers, params=querystring)  # дёрнули API
         if response.status_code != 200:
             print(response)
-            return []
+            return 'Что-то пошло не так'
 
         resp_json = response.json()
         resp_departure = resp_json['departures']
