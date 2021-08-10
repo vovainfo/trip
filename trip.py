@@ -36,6 +36,7 @@ def get_route_list(base_airport: str, minimum_departure_date: str, maximum_retur
     dep_list = {}  # список вылетов, попадающих в период
     arrival_list = {}  # список прилётов, попадающих в период
 
+    # в данном цикле в dep_list и arrival_list собираем все вылеты и прилёты в базовый аэропорт за заданный интервал
     while cur_date < max_date:  # цикл по периодам длиной 12 часов
         cur_date_str = cur_date.strftime('%Y-%m-%dT%H:%M')
         cur_max_date_str = cur_max_date.strftime('%Y-%m-%dT%H:%M')
@@ -61,14 +62,17 @@ def get_route_list(base_airport: str, minimum_departure_date: str, maximum_retur
         for one_flight in resp_departure:  # цикл по всем вылетам в текущем 12-и часовом интервале
             try:
                 icao: str = one_flight['arrival']['airport']['icao']
-            except KeyError:  # не нашли код аэропорта для рейса. Игнорируем.
+            except KeyError:  # не нашли код аэропорта для рейса. Такое бывает для мелких аэропортов. Игнорируем рейс.
                 continue
             if icao not in dep_list:  # такого аэропорта в списке ещё нет
-                dep_list[icao] = []
+                dep_list[icao] = {}
+                dep_list[icao]['airport'] = one_flight['arrival']['airport']
+                dep_list[icao]['flights'] = []
+
 
             new_item = parse_one_flight(one_flight)
             # print(new_item['time_departure'].replace(tzinfo=None))
-            dep_list[icao].append(new_item)
+            dep_list[icao]['flights'].append(new_item)
 
         for one_flight in resp_arrival: # цикл по всем прилётам в текущем 12-и часовом интервале
             try:
@@ -76,11 +80,13 @@ def get_route_list(base_airport: str, minimum_departure_date: str, maximum_retur
             except KeyError:  # не нашли код аэропорта для рейса. Игнорируем.
                 continue
             if icao not in arrival_list:  # такого аэропорта в списке ещё нет
-                arrival_list[icao] = []
+                arrival_list[icao] = {}
+                arrival_list[icao]['airport'] = one_flight['departure']['airport']
+                arrival_list[icao]['flights'] = []
             new_item = parse_one_flight(one_flight)
 
             # print(new_item['time_departure'].replace(tzinfo=None))
-            arrival_list[icao].append(new_item)
+            arrival_list[icao]['flights'].append(new_item)
 
         cur_date = cur_max_date + dt.timedelta(minutes=1)  # начало следующего периода = конец текущего + 1 минута
         cur_max_date = min(cur_date + dt.timedelta(hours=12, minutes=-1), max_date)
@@ -88,19 +94,19 @@ def get_route_list(base_airport: str, minimum_departure_date: str, maximum_retur
     # сортируем вылеты из базового аэропорта по каждому пункту назначения в порядке возрастания времени прибытия
     # в пункт путешествия (самый ранний вылет вначале)
     for icao in dep_list:
-        dep_list[icao].sort(key=lambda flight: flight['time_arrival'])
+        dep_list[icao]['flights'].sort(key=lambda flight: flight['time_arrival'])
 
     # сортируем возвращения в базовый аэропорт по каждому пункту назначения в порядке убывания времени вылета
     # из пункта путешествия (самый поздний вылет в начале)
     for icao in arrival_list:
-        arrival_list[icao].sort(key=lambda flight: flight['time_departure'], reverse=True)
+        arrival_list[icao]['flights'].sort(key=lambda flight: flight['time_departure'], reverse=True)
 
     # финальный рывок - отбираем аэропорты и рейсы, которые подпадают под ограничения.
     ret_data = []  # итоговый объект
     for icao in dep_list:
-        minimum_time_arrival = dep_list[icao][0]['time_arrival']
+        minimum_time_arrival = dep_list[icao]['flights'][0]['time_arrival']
         try:
-            maximum_time_departure = arrival_list[icao][0]['time_departure']
+            maximum_time_departure = arrival_list[icao]['flights'][0]['time_departure']
         except KeyError:  # вылет есть, возврата нет
             continue
         maximum_stay = maximum_time_departure - minimum_time_arrival
@@ -109,17 +115,17 @@ def get_route_list(base_airport: str, minimum_departure_date: str, maximum_retur
             print(f'Хрен вам, а не {icao}')
             continue
         one_airport = {}
-        one_airport['destination_airport_icao'] = icao
-        one_airport['destination_airport_name'] = 'ToDo: airport name'
+        one_airport['airport'] = dep_list[icao]['airport']
+        # one_airport['destination_airport_name'] = 'ToDo: airport name'
         one_airport['maximum_stay'] = round(maximum_stay.total_seconds()/3600)
 
         one_airport['flight_list_outbound'] = []
-        for one_flight in dep_list[icao]:
+        for one_flight in dep_list[icao]['flights']:
             if one_flight['time_arrival'] + min_stay < maximum_time_departure:
                 one_airport['flight_list_outbound'].append(one_flight)
 
         one_airport['flight_list_inbound'] = []
-        for one_flight in arrival_list[icao]:
+        for one_flight in arrival_list[icao]['flights']:
             if one_flight['time_departure'] - min_stay > minimum_time_arrival:
                 one_airport['flight_list_inbound'].append(one_flight)
         ret_data.append(one_airport)
